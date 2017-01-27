@@ -22,11 +22,17 @@
 
 ### barcode_profiling.py
 
-#### Given the list of all barcodes present in a regions left and right of each breakpoints for each SVs that are labeled as before, left, right and after , we generated a bed file that including all the 4 regions per SVs each of which 10kb long. 
-- Next we used samtools to extract the reads overlapping these regions. 
-- For each of these regions we collect the information of which barcodes occur and how many reads are supporting that barcode. 
-- In the end a new bed file is generated holding the so obtained informations.
-
+#### Building barcode profile for the alignments and count the overlapping barcodes for every split region of a chromosome 
+-  Extract alignments from every split region in to a bam file and index them
+-  Identify the barcodes in each of these split regions and count number of reads per barcode
+-  Count the barcode overlaps between the  split regions of interest
+-Input: Phased bam file from 10x data, Constructed split regions in bed format using Topsorter class (func exportVCFBed )
+-Output: directory containing files
+         overlapping_reads.bam
+         overlapping_reads.bam.bai
+         reads_barcode_profile.txt
+         barcode_overlaps_between_regions.txt
    
+-Command": ./barcode_profiles.py -bam <input phased bam> -bed <input constructed bed file> -o <output dir name>
 
 
