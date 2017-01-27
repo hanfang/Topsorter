@@ -26,13 +26,13 @@
 -  Extract alignments from every split region in to a bam file and index them
 -  Identify the barcodes in each of these split regions and count number of reads per barcode
 -  Count the barcode overlaps between the  split regions of interest
--Input: Phased bam file from 10x data, Constructed split regions in bed format using Topsorter class (func exportVCFBed )
--Output: directory containing files
+-  Input: Phased bam file from 10x data, Constructed split regions in bed format using Topsorter class (func exportVCFBed )
+-  Output: directory containing files
          overlapping_reads.bam
          overlapping_reads.bam.bai
          reads_barcode_profile.txt
          barcode_overlaps_between_regions.txt
    
--Command": ./barcode_profiles.py -bam \<input phased bam\> -bed \<input constructed bed file\> -o \<output dir name\>
+-  Command: ./barcode_profiles.py -bam \<input phased bam\> -bed \<input constructed bed file\> -o \<output dir name\>
 
 
