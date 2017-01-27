@@ -140,8 +140,6 @@ def count_barcode_overlaps(logging,bed_file,output_bed):
  #print u_infos
  output_bed.write("Variant_Info\tbefore->left\tbefore->right\tbefore->after\tleft->right\tleft->after\tright->after\n")
  for u in u_infos:
-        print u+",before"
-        print u+',after'
         before = data.loc[data[3] == u+",before"]
         after = data.loc[data[3] == u+',after']
         left =  data.loc[data[3] == u+',left']
@@ -155,7 +153,7 @@ def count_barcode_overlaps(logging,bed_file,output_bed):
         output_bed.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}\n".format(u,str(len(b_to_a)),str(len(b_to_l)),str(len(b_to_r)),str(len(l_to_r)),str(len(l_to_a)),str(len(r_to_a))))
  output_bed.close()
  after = time.time()
- logging,info('Counting barcode overlaps in the vcf regions completed in %.2fs' % (after - before))
+ #logging.info('Counting barcode overlaps in the vcf regions completed in {0}'.format( str(after - before)))
 
 if __name__ == "__main__":
     logger = logging.getLogger('barcode_profiling')
@@ -180,6 +178,6 @@ if __name__ == "__main__":
     #	raise Exception("{0} Not Found".format(output_file))
     barcode_file = os.path.join(args.output,"reads_barcode_profile.txt")
     buildcov(logger,bam_file,bed_file,barcode_file)
-    #tenkbfile="/seq/schatz/sramakri/NA24385_GRCh37/NA24385_GRCh37.bam.manta.vcf.chr20_shit_new.bed" 
-    #overlap_file=os.path.join(args.output,"barcode_overlaps_between_regions.txt")
-    #count_barcode_overlaps(logger,tenkbfile,overlap_file)
+    #tenkbfile="/seq/schatz/sramakri/NA24385_GRCh37/NA24385_GRCh37_chr20_shit_new_barcodes.bed" 
+    overlap_file=os.path.join(args.output,"barcode_overlaps_between_regions.txt")
+    count_barcode_overlaps(logger,barcode_file,overlap_file)
