@@ -33,6 +33,6 @@
          reads_barcode_profile.txt
          barcode_overlaps_between_regions.txt
    
--Command": ./barcode_profiles.py -bam <input phased bam> -bed <input constructed bed file> -o <output dir name>
+-Command": ./barcode_profiles.py -bam \<input phased bam\> -bed \<input constructed bed file\> -o \<output dir name\>
 
 
