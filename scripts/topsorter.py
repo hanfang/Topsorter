@@ -36,16 +36,21 @@ class topSorter:
     'parse & filter vcf files, construct & traverse DAGs'
     def __init__(self, inVcf):
         self.inVcf  = inVcf
+        self.vcfReader = vcf.Reader(open(self.inVcf, 'r'))
+        self.prefix = os.path.splitext(os.path.basename(self.inVcf))[0]
         # self.sub_vcf = []
         self.largeVariants = []
         self.chrSizes = {}
         self.chrs = []
+        self.graph = collections.defaultdict(list)
+        self.DAGs, self.orders, self.paths, self.passedVars = {}, {}, {}, {}
+        self.barcodes = collections.defaultdict(dict)
 
     # function for reading and filtering vcf files
     def readVcf(self):
-        # read a vcf file
-        self.vcfReader = vcf.Reader(open(self.inVcf, 'r'))
-        self.chrs = [i for i in self.vcfReader.contigs.keys() if "random" not in i and "Un" not in i and "EBV" not in i]
+        # remove alt contigs
+        #self.chrs = [i for i in self.vcfReader.contigs.keys() if "random" not in i and "Un" not in i and "EBV" not in i]
+        self.chrs = ["chr20"]
         #samples = self.vcfReader.samples
         # [temp] filter out variants without END
         hashset = set()
@@ -53,17 +58,16 @@ class topSorter:
             #call = variant.genotype(samples[0])
             if 'END' in variant.INFO and 'PAIR_COUNT' in variant.INFO and variant.INFO['SVTYPE'] in ("DEL", "DUP", "INV"):
                 if abs(variant.INFO['END'] - variant.POS) > 10000:
-                    if variant.INFO['PAIR_COUNT'] >= 10: #  or variant.samples['1']['SU'] >= 10:
-                        id = (variant.CHROM, variant.POS, variant.INFO['END'])
-                        if id not in hashset:
-                            self.largeVariants.append(variant)
-                            hashset.add(id)
+                    # if variant.INFO['PAIR_COUNT'] >= 10: #  or variant.samples['1']['SU'] >= 10:
+                    id = (variant.CHROM, variant.POS, variant.INFO['END'])
+                    if id not in hashset:
+                        self.largeVariants.append(variant)
+                        hashset.add(id)
         # create a dict of chromosome: size
         for k, v in self.vcfReader.contigs.items():
             self.chrSizes[k] = v[1]
 
     def createFolder(self):
-        self.prefix = os.path.splitext(os.path.basename(self.inVcf))[0]
         cmd = 'mkdir -p ' + self.prefix + ';' + 'mkdir -p ' + self.prefix + '/DAGs'
         os.system(cmd)
 
@@ -77,67 +81,80 @@ class topSorter:
         bedStr = ""
         for var in self.largeVariants:
             chr = var.CHROM
-            before = chr +"\t"+ str(var.POS-10001) +"\t"+ str(var.POS-1) +"\t"+ var.ID + ",before\n"
-            left   = chr +"\t"+ str(var.POS-1) +"\t"+ str(var.POS+9999) +"\t"+ var.ID + ",left\n"
-            right = chr +"\t"+ str(var.INFO['END']-10001) +"\t"+ str(var.INFO['END']-1) +"\t"+ var.ID + ",right\n"
-            after = chr +"\t"+ str(var.INFO['END']-1) +"\t"+ str(var.INFO['END']+9999) +"\t"+ var.ID + ",after\n"
+            coordinate = str(var.POS) + "," + str(var.INFO['END'])
+            before = chr +"\t"+ str(var.POS-10001) +"\t"+ str(var.POS-1) +"\t"+ var.ID +","+ coordinate + ",before" + "\n"
+            left   = chr +"\t"+ str(var.POS-1) +"\t"+ str(var.POS+9999) +"\t"+ var.ID +","+ coordinate + ",left" + "\n"
+            right = chr +"\t"+ str(var.INFO['END']-10001) +"\t"+ str(var.INFO['END']-1) +"\t"+ var.ID +","+ coordinate + ",right" + "\n"
+            after = chr +"\t"+ str(var.INFO['END']-1) +"\t"+ str(var.INFO['END']+9999) +"\t"+ var.ID +","+ coordinate + ",after" +"\n"
             bedStr += before + left + right + after
         # write bed file to local
         bedOut = open(self.prefix + "/" + self.prefix + ".bed", "w")
         bedOut.write(bedStr)
 
     def parseBed(self):
-        pass
+        with open(self.prefix + "/" + self.prefix + ".barcodes.bed", 'r') as fl:
+            next(fl)
+            for line in fl:
+                row = line.split("\t")
+                [chr, start, end, varId, b2l, b2r, b2a, l2r, l2a, r2a]= row
+                self.barcodes[chr][varId] = [int(b2l), int(b2r), int(b2a), int(l2r), int(l2a), int(r2a)]
+        fl.close()
 
     def createNodes(self):
         # sort the variants by start coordinates
         self.largeVariants = sorted(self.largeVariants, key=lambda x: x.POS)
-
         # scan the chromosomes and split by variants
-        self.graph = collections.defaultdict(list)
         lastPos = collections.defaultdict(int)
-        for chr in self.chrSizes.keys():
+        for chr in self.chrs:
             i = 0
             for variant in self.largeVariants:
                 if variant.CHROM == chr:
                     # add ref node
-                    refNode = (variant.CHROM, i, variant.POS-1, "REF")
+                    refNode = (variant.CHROM, i, variant.POS-1, "REF", variant.ID)
                     self.graph[chr].append(refNode)
                     # add variant node
-                    varNode = (variant.CHROM, variant.POS-1, variant.INFO['END']-1, variant.INFO['SVTYPE'])
+                    varNode = (variant.CHROM, variant.POS-1, variant.INFO['END']-1, variant.INFO['SVTYPE'], variant.ID)
                     self.graph[chr].append(varNode)
                     i = variant.INFO['END'] - 1
                     lastPos[chr] = i # keep track of the last pos
         # add the last node
-        for chr in self.chrSizes.keys():
-            last_node = (chr, lastPos[chr], self.chrSizes[chr]-1, "REF")
-            self.graph[chr].append(last_node)
+        for chr in self.chrs:
+            lastNode = (chr, lastPos[chr], self.chrSizes[chr]-1, "REF")
+            self.graph[chr].append(lastNode)
 
     def createWeightedDAG(self, chr):
         DAG = nx.DiGraph()
         # add nodes
         curr = self.graph[chr]
-        ## weights = # placeholder
+        weights = self.barcodes[chr]
         # initialize the graph with equal weight
         for i in range(1, len(curr)-1):
+            varId = curr[i][4]
+            [b2l, b2r, b2a, l2r, l2a, r2a] = weights[varId]
             DAG.add_node(curr[i-1])
             DAG.add_node(curr[i])
             DAG.add_node(curr[i+1])
-            DAG.add_edge(curr[i-1], curr[i], weight=1)
-            DAG.add_edge(curr[i], curr[i+1], weight=1)
             if curr[i][3] == "DEL":
-                DAG.add_edge(curr[i-1], curr[i+1], weight=2)
+                DAG.add_edge(curr[i-1], curr[i], weight=b2l)
+                DAG.add_edge(curr[i-1], curr[i+1], weight=b2a)
+                DAG.add_edge(curr[i], curr[i+1], weight=r2a)
             elif curr[i][3] == "DUP":
-                nodeCopy = (curr[i][0], curr[i][1], curr[i][2], "DUP_COPY")
+                nodeCopy = (curr[i][0], curr[i][1], curr[i][2], "DUP_COPY", varId)
                 DAG.add_node(nodeCopy)
-                DAG.add_edge(curr[i], nodeCopy, weight=0.5)
-                DAG.add_edge(nodeCopy, curr[i+1], weight=0.5)
+                DAG.add_edge(curr[i-1], curr[i], weight=b2l)
+                DAG.add_edge(curr[i], nodeCopy, weight=l2r)
+                DAG.add_edge(curr[i], curr[i+1], weight=l2a)
+                DAG.add_edge(nodeCopy, curr[i+1], weight=r2a)
             elif curr[i][3] == "INV":
-                nodeInv = (curr[i][0], curr[i][2], curr[i][1], "INV_FLIP")
-                DAG.add_edge(curr[i-1], nodeInv, weight=1)
-                DAG.add_edge(nodeInv, curr[i+1], weight=1)
-            elif curr[i][3] == "BND":
-                DAG.add_edge(curr[i-1], curr[i+1], weight=2) # currently as DELs
+                nodeInv = (curr[i][0], curr[i][2], curr[i][1], "INV_FLIP", varId)
+                DAG.add_edge(curr[i-1], curr[i], weight=b2l)
+                DAG.add_edge(curr[i], curr[i+1], weight=r2a)
+                DAG.add_edge(curr[i-1], nodeInv, weight=b2r)
+                DAG.add_edge(nodeInv, curr[i+1], weight=l2a)
+            elif curr[i][3] == "BND": # currently as DELs
+                DAG.add_edge(curr[i-1], curr[i], weight=b2l)
+                DAG.add_edge(curr[i], curr[i+1], weight=r2a)
+                DAG.add_edge(curr[i-1], curr[i+1], weight=b2a)
             else:
                 pass
         return DAG
@@ -145,19 +162,14 @@ class topSorter:
     def findLongestPath(self, chr):
         # topological sorting
         dag = self.DAGs[chr]
-        sys.stderr.write("[execute]\tPerforming topological sorting for " + str(chr) + "\n")#, flush=True)
+        # sys.stderr.write("[execute]\tPerforming topological sorting for " + str(chr) + "\n")
         order = nx.topological_sort(dag)
-        print("[results]\t Topologically sorted order of nodes in ", chr, "\n", order, flush=True)
+        # print("[results]\t Topologically sorted order of nodes in ", chr, "\n", order, flush=True)
         # find the longest path
+        sys.stderr.write("[execute]\tFinding longest paths in " + str(chr) + "\n")
         longest_weighted_path = self.longestWeightedPath(dag)
-        print("[results]\t Longest weighted path in ", chr, "\n", longest_weighted_path)
+        print("[results]\tLongest weighted path in", chr, "\n", longest_weighted_path)
         return order, longest_weighted_path
-        # temp:
-        # longest path without weights:
-        # longest = nx.dag_longest_path(self.DAG)
-        # print ("[results]\t Longest\n", longest, flush=True)
-        # longestDis = nx.dag_longest_path_length(self.DAG)
-        # print ("[results]\t Longest length: ", longestDis, flush=True)
 
     def longestWeightedPath(self, G):
         dist = {} # stores [node, distance] pair
@@ -169,18 +181,50 @@ class topSorter:
                 dist[node] = max(pairs)
             else:
                 dist[node] = (0, node)
-        node,(length,_)  = max(dist.items(), key=lambda x:x[1])
+        node, (length,_)  = max(dist.items(), key=lambda x:x[1])
         path = []
         while length > 0:
             path.append(node)
-            length,node = dist[node]
+            length, node = dist[node]
         return list(reversed(path))
+
+    def drawDAG(self, chr):
+        labels = {}
+        i = 0
+        for node in self.orders[chr]:
+            labels[node] = node[3]
+            i += 1
+        # pos = graphviz_layout(self.DAG)
+        dag = self.DAGs[chr]
+        edge_labels = {(n1,n2): dag[n1][n2]['weight'] for (n1,n2) in dag.edges()}
+        pos = nx.spring_layout(dag, k=0.5, scale=0.5)
+        pos_higher = {}
+        y_off = 1  # offset on the y axis
+        # change label positions
+        #for k, v in pos.items():
+        #    pos_higher[k] = (v[0], v[1]+y_off)
+        # start plotting
+        plt.figure(figsize=(12, 12))
+        #nx.draw(dag, pos_higher, labels=labels)
+        # nx.draw_networkx(dag, pos, labels=labels)
+        #nx.draw_networkx(dag, pos)
+        #nx.draw_networkx_edge_labels(dag, pos, edge_labels=edge_labels)
+        nx.draw_networkx_nodes(dag, pos)
+        nx.draw_networkx_edges(dag, pos)
+        #nx.draw_networkx_labels(dag, pos, labels=labels)
+        nx.draw_networkx_edge_labels(dag, pos, edge_labels=edge_labels)
+        plt.title(chr)
+        plt.axis('off')
+        plt.gcf()
+        plt.savefig(self.prefix + "/DAGs/dag." + chr + ".pdf")
+        plt.clf()
+        plt.close()
 
     def allDAGs(self):
         # create a list of chromosome to analyze
-        chroms = list(set(self.chrs).intersection(list(self.graph.keys()))) #chroms.remove("chr21") #chroms.remove("chrY")
-        # self.graph.keys()
-        self.DAGs, self.orders, self.paths = {}, {}, {}
+        chroms = list(set(self.chrs).intersection(list(self.graph.keys())))
+        if "chrM" in chroms:
+            chroms.remove("chrM")
         # create dag
         for chr in chroms:
             dag = self.createWeightedDAG(chr)
@@ -190,46 +234,27 @@ class topSorter:
             order, longest_weighted_path = self.findLongestPath(chr)
             self.orders[chr] = order
             self.paths[chr] = longest_weighted_path
+            self.passedVars[chr] = set(
+                [i[4] for i in longest_weighted_path[:-1] if i[3] in ('DEL', "DUP_COPY", "INV_FLIP", "BND")])
         # draw dags
         for chr in chroms:
             self.drawDAG(chr)
-
-    def drawDAG(self, chr):
-        labels = {}
-        i = 0
-        for node in self.orders[chr]:
-            labels[node] = (i, node[3])
-            i += 1
-        # edge_labels = {(n1,n2): self.DAG[n1][n2]['weight'] for (n1,n2) in self.DAG.edges()}
-        # pos = graphviz_layout(self.DAG)
-        dag = self.DAGs[chr]
-        pos = nx.spring_layout(dag)
-        pos_higher = {}
-        y_off = 1  # offset on the y axis
-        # change label positions
-        for k, v in pos.items():
-            pos_higher[k] = (v[0], v[1]+y_off)
-        # start plotting
-        plt.figure()
-        nx.draw(dag, pos_higher, labels=labels)
-        # nx.draw_networkx(self.DAG, pos, labels=labels)
-        # nx.draw_networkx_edge_labels(self.DAG, pos, edge_labels=edge_labels)
-        plt.gcf()
-        plt.savefig(self.prefix + "/DAGs/dag." + chr + ".pdf")
-        plt.clf()
-        plt.close()
 
     # exporting vcf files
     def exportVcf(self):
         ## TODO: output in sorted order
         if int(sys.version_info.major) >= 3:
             vcf_writer = vcf.Writer(open(self.prefix + "/" + self.prefix + ".topsorter.vcf", 'w'), self.vcfReader)
-        elif int(sys.version_info.major) == 2 :
+        elif int(sys.version_info.major) == 2:
             vcf_writer = vcf.Writer(open(self.prefix + "/" + self.prefix + ".topsorter.vcf", 'wb'), self.vcfReader)
         # write to file
-        for record in self.largeVariants: # sub_vcf
-            record.INFO["Topsorter"] = "T" # placeholder
-            vcf_writer.write_record(record)
+        for var in self.largeVariants:  # sub_vcf
+            if var.CHROM in self.chrs:
+                if self.passedVars[var.CHROM] and var.ID in self.passedVars[var.CHROM]:
+                    var.INFO["Topsorter"] = "T"  # placeholder
+                else:
+                    var.INFO["Topsorter"] = "F"
+                vcf_writer.write_record(var)
 
 # the main process
 if __name__ == '__main__':
@@ -256,6 +281,7 @@ if __name__ == '__main__':
         worker.createFolder()
         sys.stderr.write("[execute]\tExporting the large SVs to vcf and flanking regions to a bed file\n")#, flush=True)
         worker.exportVcfBed()
+        worker.parseBed()
         sys.stderr.write("[execute]\tCreating the nodes\n")#, flush=True)
         worker.createNodes()
         sys.stderr.write("[execute]\tConstructing the graph and finding the longest paths\n")#, flush=True)
