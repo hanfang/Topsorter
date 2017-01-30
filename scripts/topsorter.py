@@ -113,31 +113,11 @@ class topSorter:
             last_node = (chr, lastPos[chr], self.chrSizes[chr]-1, "REF")
             self.graph[chr].append(last_node)
 
-        '''
-        # nodes for left of SV
-        prev_val = (variant.CHROM, i, variant.POS-2, "prev")
-        prev_node = TreeNode(prev_val)
-        prev_node.start, prev_node.end = i, variant.POS-2
-        if i != 0:
-            curr_node.next.append(prev_node)
-        # current SV node
-        curr_val = (variant.CHROM, variant.POS-1, variant.INFO['END']-1, "curr")
-        curr_node = TreeNode(curr_val)
-        curr_node.start, curr_node.end = variant.POS-1, variant.INFO['END']-1
-        # link the prev to curr node
-        prev_node.next.append(curr_node)
-        self.graph[chr].extend([prev_node, curr_node])
-        i = variant.INFO['END']
-        if self.graph[chr] != []:
-           self.graph[chr][-1].next = [None]
-        '''
-
     def createWeightedDAG(self, chr):
-        # self.DAG = nx.DiGraph()
         DAG = nx.DiGraph()
         # add nodes
         curr = self.graph[chr]
-        ## weights =
+        ## weights = # placeholder
         # initialize the graph with equal weight
         for i in range(1, len(curr)-1):
             DAG.add_node(curr[i-1])
@@ -172,7 +152,7 @@ class topSorter:
         longest_weighted_path = self.longestWeightedPath(dag)
         print("[results]\t Longest weighted path in ", chr, "\n", longest_weighted_path)
         return order, longest_weighted_path
-
+        # temp:
         # longest path without weights:
         # longest = nx.dag_longest_path(self.DAG)
         # print ("[results]\t Longest\n", longest, flush=True)
@@ -198,17 +178,14 @@ class topSorter:
 
     def allDAGs(self):
         # create a list of chromosome to analyze
-        #chroms = ["chr" + str(i) for i in range(1,23)] + ["chrX", "chrY"]
         chroms = list(set(self.chrs).intersection(list(self.graph.keys()))) #chroms.remove("chr21") #chroms.remove("chrY")
         # self.graph.keys()
-        self.DAGs = {}
-        self.orders = {}
-        self.paths = {}
+        self.DAGs, self.orders, self.paths = {}, {}, {}
         # create dag
         for chr in chroms:
             dag = self.createWeightedDAG(chr)
             self.DAGs[chr] = dag
-        # find lonest path
+        # find longest path
         for chr in chroms:
             order, longest_weighted_path = self.findLongestPath(chr)
             self.orders[chr] = order
@@ -283,7 +260,7 @@ if __name__ == '__main__':
         worker.createNodes()
         sys.stderr.write("[execute]\tConstructing the graph and finding the longest paths\n")#, flush=True)
         worker.allDAGs()
-        sys.stderr.write("[execute]\tDrew graphs for each chromosomes\n")#, flush=True)
+        sys.stderr.write("[execute]\tDrew graphs for each chromosome\n")#, flush=True)
         time = str(datetime.now())
         sys.stderr.write("[execute]\tExporting the vcf file\n")#, flush=True)
         worker.exportVcf()
