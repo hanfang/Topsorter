@@ -39,11 +39,13 @@ class topSorter:
         # self.sub_vcf = []
         self.largeVariants = []
         self.chrSizes = {}
+        self.chrs = []
 
     # function for reading and filtering vcf files
     def readVcf(self):
         # read a vcf file
         self.vcfReader = vcf.Reader(open(self.inVcf, 'r'))
+        self.chrs = [i for i in self.vcfReader.contigs.keys() if "random" not in i and "Un" not in i and "EBV" not in i]
         #samples = self.vcfReader.samples
         # [temp] filter out variants without END
         hashset = set()
@@ -57,7 +59,7 @@ class topSorter:
                             self.largeVariants.append(variant)
                             hashset.add(id)
         # create a dict of chromosome: size
-        for k,v in self.vcfReader.contigs.items():
+        for k, v in self.vcfReader.contigs.items():
             self.chrSizes[k] = v[1]
 
     def createFolder(self):
@@ -83,6 +85,9 @@ class topSorter:
         # write bed file to local
         bedOut = open(self.prefix + "/" + self.prefix + ".bed", "w")
         bedOut.write(bedStr)
+
+    def parseBed(self):
+        pass
 
     def createNodes(self):
         # sort the variants by start coordinates
@@ -193,8 +198,8 @@ class topSorter:
 
     def allDAGs(self):
         # create a list of chromosome to analyze
-        chroms = ["chr" + str(i) for i in range(1,23)] + ["chrX", "chrY"]
-        chroms = list(set(chroms).intersection(list(self.graph.keys()))) #chroms.remove("chr21") #chroms.remove("chrY")
+        #chroms = ["chr" + str(i) for i in range(1,23)] + ["chrX", "chrY"]
+        chroms = list(set(self.chrs).intersection(list(self.graph.keys()))) #chroms.remove("chr21") #chroms.remove("chrY")
         # self.graph.keys()
         self.DAGs = {}
         self.orders = {}
@@ -239,6 +244,7 @@ class topSorter:
 
     # exporting vcf files
     def exportVcf(self):
+        ## TODO: output in sorted order
         if int(sys.version_info.major) >= 3:
             vcf_writer = vcf.Writer(open(self.prefix + "/" + self.prefix + ".topsorter.vcf", 'w'), self.vcfReader)
         elif int(sys.version_info.major) == 2 :
