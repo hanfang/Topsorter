@@ -82,10 +82,10 @@ class topSorter:
         for var in self.largeVariants:
             chr = var.CHROM
             coordinate = str(var.POS) + "," + str(var.INFO['END'])
-            before = chr +"\t"+ str(var.POS-10001) +"\t"+ str(var.POS-1) +"\t"+ var.ID +","+ coordinate + ",before" + "\n"
-            left   = chr +"\t"+ str(var.POS-1) +"\t"+ str(var.POS+9999) +"\t"+ var.ID +","+ coordinate + ",left" + "\n"
-            right = chr +"\t"+ str(var.INFO['END']-10001) +"\t"+ str(var.INFO['END']-1) +"\t"+ var.ID +","+ coordinate + ",right" + "\n"
-            after = chr +"\t"+ str(var.INFO['END']-1) +"\t"+ str(var.INFO['END']+9999) +"\t"+ var.ID +","+ coordinate + ",after" +"\n"
+            before = chr +"\t"+ str(var.POS-1001) +"\t"+ str(var.POS-1) +"\t"+ var.ID +","+ coordinate + ",before" + "\n"
+            left   = chr +"\t"+ str(var.POS-1) +"\t"+ str(var.POS+999) +"\t"+ var.ID +","+ coordinate + ",left" + "\n"
+            right = chr +"\t"+ str(var.INFO['END']-1001) +"\t"+ str(var.INFO['END']-1) +"\t"+ var.ID +","+ coordinate + ",right" + "\n"
+            after = chr +"\t"+ str(var.INFO['END']-1) +"\t"+ str(var.INFO['END']+999) +"\t"+ var.ID +","+ coordinate + ",after" +"\n"
             bedStr += before + left + right + after
         # write bed file to local
         bedOut = open(self.prefix + "/" + self.prefix + ".bed", "w")
@@ -151,10 +151,10 @@ class topSorter:
                 DAG.add_edge(curr[i], curr[i+1], weight=r2a)
                 DAG.add_edge(curr[i-1], nodeInv, weight=b2r)
                 DAG.add_edge(nodeInv, curr[i+1], weight=l2a)
-            elif curr[i][3] == "BND": # currently as DELs
+            elif curr[i][3] == "BND": # currently as DELs, TBD
                 DAG.add_edge(curr[i-1], curr[i], weight=b2l)
                 DAG.add_edge(curr[i], curr[i+1], weight=r2a)
-                DAG.add_edge(curr[i-1], curr[i+1], weight=b2a)
+                DAG.add_edge(curr[i-1], curr[i+1], weight=b2a) #
             else:
                 pass
         return DAG
