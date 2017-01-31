@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 from io import open
 import os
 import sys
+import re
 import argparse
 import vcf
 import collections
@@ -34,10 +35,9 @@ class TreeNode(object):
 
 class topSorter:
     'parse & filter vcf files, construct & traverse DAGs'
-    def __init__(self, inVcf):
+    def __init__(self, inVcf, windowSize):
         self.inVcf  = inVcf
-        self.vcfReader = vcf.Reader(open(self.inVcf, 'r'))
-        self.prefix = os.path.splitext(os.path.basename(self.inVcf))[0]
+        self.windowSize = windowSize
         # self.sub_vcf = []
         self.largeVariants = []
         self.chrSizes = {}
@@ -48,20 +48,24 @@ class topSorter:
 
     # function for reading and filtering vcf files
     def readVcf(self):
+        # import vcf
+        self.vcfReader = vcf.Reader(open(self.inVcf, 'r'))
+        self.prefix = os.path.splitext(os.path.basename(self.inVcf))[0]
         # remove alt contigs
-        #self.chrs = [i for i in self.vcfReader.contigs.keys() if "random" not in i and "Un" not in i and "EBV" not in i]
-        self.chrs = ["chr20"]
+        contigsToExclude = "^((?!random|Un|EBV|MT|M).)*$"
+        self.chrs = [i for i in self.vcfReader.contigs.keys() if re.match(contigsToExclude, i)]
+        # self.chrs = ["chr20"]
         #samples = self.vcfReader.samples
         # [temp] filter out variants without END
         hashset = set()
-        for variant in self.vcfReader:
+        for var in self.vcfReader:
             #call = variant.genotype(samples[0])
-            if 'END' in variant.INFO and 'PAIR_COUNT' in variant.INFO and variant.INFO['SVTYPE'] in ("DEL", "DUP", "INV"):
-                if abs(variant.INFO['END'] - variant.POS) > 10000:
-                    # if variant.INFO['PAIR_COUNT'] >= 10: #  or variant.samples['1']['SU'] >= 10:
-                    id = (variant.CHROM, variant.POS, variant.INFO['END'])
-                    if id not in hashset:
-                        self.largeVariants.append(variant)
+            if 'END' in var.INFO and 'PAIR_COUNT' in var.INFO and var.INFO['SVTYPE'] in ("DEL", "DUP", "INV"):
+                if abs(var.INFO['END'] - var.POS) > 10000:
+                    # if var.INFO['PAIR_COUNT'] >= 10: #  or var.samples['1']['SU'] >= 10:
+                    id = (var.CHROM, var.POS, var.INFO['END'])
+                    if id not in hashset and var.CHROM in self.chrs:
+                        self.largeVariants.append(var)
                         hashset.add(id)
         # create a dict of chromosome: size
         for k, v in self.vcfReader.contigs.items():
@@ -81,14 +85,23 @@ class topSorter:
         bedStr = ""
         for var in self.largeVariants:
             chr = var.CHROM
+            chrEnd = self.chrSizes[chr]
+            if var.POS-self.windowSize-1 >=0 and var.INFO['END']+self.windowSize-1 <= chrEnd:
+                windowSize = self.windowSize
+            else:
+                windowSize = min(var.POS, chrEnd-var.INFO['END'])
+                print("[warning]\t" + str(var.ID) + " - distance to chromosome end smaller than specified: " + str(windowSize) +"\n")
+            if windowSize <= 500:
+                print("[warning]\t" + str(var.ID) + " - distance to chromosome end is less than 500bp\n")
+            leftMost, rightMost = max(0, var.POS-windowSize-1), min(chrEnd, var.INFO['END']+windowSize-1)
             coordinate = str(var.POS) + "," + str(var.INFO['END'])
-            before = chr +"\t"+ str(var.POS-1001) +"\t"+ str(var.POS-1) +"\t"+ var.ID +","+ coordinate + ",before" + "\n"
-            left   = chr +"\t"+ str(var.POS-1) +"\t"+ str(var.POS+999) +"\t"+ var.ID +","+ coordinate + ",left" + "\n"
-            right = chr +"\t"+ str(var.INFO['END']-1001) +"\t"+ str(var.INFO['END']-1) +"\t"+ var.ID +","+ coordinate + ",right" + "\n"
-            after = chr +"\t"+ str(var.INFO['END']-1) +"\t"+ str(var.INFO['END']+999) +"\t"+ var.ID +","+ coordinate + ",after" +"\n"
+            before = chr +"\t"+ str(leftMost) +"\t"+ str(var.POS-1) +"\t"+ var.ID +","+ coordinate + ",before" + "\n"
+            left = chr +"\t"+ str(var.POS-1) +"\t"+ str(var.POS+windowSize-1) +"\t"+ var.ID +","+ coordinate + ",left" + "\n"
+            right = chr +"\t"+ str(var.INFO['END']-windowSize-1) +"\t"+ str(var.INFO['END']-1) +"\t"+ var.ID +","+ coordinate + ",right" + "\n"
+            after = chr +"\t"+ str(var.INFO['END']-1) +"\t"+ str(rightMost) +"\t"+ var.ID +","+ coordinate + ",after" +"\n"
             bedStr += before + left + right + after
         # write bed file to local
-        bedOut = open(self.prefix + "/" + self.prefix + ".bed", "w")
+        bedOut = open(self.prefix + "/" + self.prefix + "." + str(self.windowSize) +".bed", "w")
         bedOut.write(bedStr)
 
     def parseBed(self):
@@ -100,6 +113,7 @@ class topSorter:
                 self.barcodes[chr][varId] = [int(b2l), int(b2r), int(b2a), int(l2r), int(l2a), int(r2a)]
         fl.close()
 
+    ## TODO: Change me
     def createNodes(self):
         # sort the variants by start coordinates
         self.largeVariants = sorted(self.largeVariants, key=lambda x: x.POS)
@@ -151,7 +165,7 @@ class topSorter:
                 DAG.add_edge(curr[i], curr[i+1], weight=r2a)
                 DAG.add_edge(curr[i-1], nodeInv, weight=b2r)
                 DAG.add_edge(nodeInv, curr[i+1], weight=l2a)
-            elif curr[i][3] == "BND": # currently as DELs, TBD
+            elif curr[i][3] == "BND": # currently as DELs, TBD B2A, unique
                 DAG.add_edge(curr[i-1], curr[i], weight=b2l)
                 DAG.add_edge(curr[i], curr[i+1], weight=r2a)
                 DAG.add_edge(curr[i-1], curr[i+1], weight=b2a) #
@@ -260,6 +274,7 @@ class topSorter:
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='createGraph.py - a script for constructing a graph from a vcf file')
     parser.add_argument("-i", help="input vcf file [REQUIRED]",required=True)
+    parser.add_argument("-w", help="window size of counting barcodes, default: 1000 [OPTIONAL]", default=1000, required=False, type=int)
 
     # check if there is any argument
     if len(sys.argv) <= 1:
@@ -272,8 +287,9 @@ if __name__ == '__main__':
     # process the file if the input files exist
     if (args.i!=None):
         vcfFn = args.i
+        windowSize = args.w
         # main
-        worker = topSorter(vcfFn)
+        worker = topSorter(vcfFn, windowSize)
         time = str(datetime.now())
         sys.stderr.write("[status]\tTopsorter started at " + str(time) + "\n")#, flush=True)
         sys.stderr.write("[status]\tReading the vcf file: " + str(args.i) + "\n")#, flush=True)
@@ -281,15 +297,15 @@ if __name__ == '__main__':
         worker.createFolder()
         sys.stderr.write("[execute]\tExporting the large SVs to vcf and flanking regions to a bed file\n")#, flush=True)
         worker.exportVcfBed()
-        worker.parseBed()
+        #worker.parseBed()
         sys.stderr.write("[execute]\tCreating the nodes\n")#, flush=True)
-        worker.createNodes()
+        #worker.createNodes()
         sys.stderr.write("[execute]\tConstructing the graph and finding the longest paths\n")#, flush=True)
-        worker.allDAGs()
+        #worker.allDAGs()
         sys.stderr.write("[execute]\tDrew graphs for each chromosome\n")#, flush=True)
         time = str(datetime.now())
         sys.stderr.write("[execute]\tExporting the vcf file\n")#, flush=True)
-        worker.exportVcf()
+        #worker.exportVcf()
         sys.stderr.write("[status]\tTopsorter finished " + str(time) + "\n")#, flush=True)
     # print usage message if any argument is missing
     else:
