@@ -20,7 +20,7 @@
 
 -------- 
 
-### barcode_profiling.py
+### BarcodeProfiler
 
 #### Building barcode profile for the alignments and count the overlapping barcodes for every split region of a chromosome 
 -  Extract alignments from every split region in to a bam file and index them
