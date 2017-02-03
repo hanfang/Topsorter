@@ -22,6 +22,7 @@ import networkx as nx
 import uuid
 from networkx.drawing.nx_agraph import graphviz_layout
 from datetime import datetime
+from intervaltree import Interval, IntervalTree
 
 
 # the class for the data structure
@@ -45,6 +46,7 @@ class topSorter:
         self.graph = collections.defaultdict(list)
         self.DAGs, self.orders, self.paths, self.passedVars = {}, {}, {}, {}
         self.barcodes = collections.defaultdict(dict)
+        self.treeDic = {}
 
     # function for reading and filtering vcf files
     def readVcf(self):
@@ -113,24 +115,32 @@ class topSorter:
                 self.barcodes[chr][varId] = [int(b2l), int(b2r), int(b2a), int(l2r), int(l2a), int(r2a)]
         fl.close()
 
+    def buildIntervalTree(self):
+        # sort the variants by start coordinates
+        self.largeVariants = sorted(self.largeVariants, key=lambda x: (x.CHROM, x.POS))
+        # build interval tree for each chr
+        for chr in self.chrs:
+            variants = [var for var in self.largeVariants if var.CHROM == chr]
+            intervals = [(var.POS, var.INFO['END'], var.ID) for var in variants] # (start, end, data)
+            tree = IntervalTree(Interval(*iv) for iv in intervals)
+            self.treeDic[chr] = tree
+
     ## TODO: Change me
     def createNodes(self):
-        # sort the variants by start coordinates
-        self.largeVariants = sorted(self.largeVariants, key=lambda x: x.POS)
         # scan the chromosomes and split by variants
         lastPos = collections.defaultdict(int)
         for chr in self.chrs:
             i = 0
-            for variant in self.largeVariants:
-                if variant.CHROM == chr:
-                    # add ref node
-                    refNode = (variant.CHROM, i, variant.POS-1, "REF", variant.ID)
-                    self.graph[chr].append(refNode)
-                    # add variant node
-                    varNode = (variant.CHROM, variant.POS-1, variant.INFO['END']-1, variant.INFO['SVTYPE'], variant.ID)
-                    self.graph[chr].append(varNode)
-                    i = variant.INFO['END'] - 1
-                    lastPos[chr] = i # keep track of the last pos
+            variants = [var for var in self.largeVariants if var.CHROM == chr]
+            for var in variants:
+                # add ref node
+                refNode = (var.CHROM, i, var.POS - 1, "REF", var.ID)
+                self.graph[chr].append(refNode)
+                # add variant node
+                varNode = (var.CHROM, var.POS - 1, var.INFO['END'] - 1, var.INFO['SVTYPE'], var.ID)
+                self.graph[chr].append(varNode)
+                i = var.INFO['END'] - 1
+                lastPos[chr] = i  # keep track of the last pos
         # add the last node
         for chr in self.chrs:
             lastNode = (chr, lastPos[chr], self.chrSizes[chr]-1, "REF")
@@ -297,6 +307,8 @@ if __name__ == '__main__':
         worker.createFolder()
         sys.stderr.write("[execute]\tExporting the large SVs to vcf and flanking regions to a bed file\n")#, flush=True)
         worker.exportVcfBed()
+        sys.stderr.write("[execute]\tBuilding interval trees for the variants\n")#, flush=True)
+        worker.buildIntervalTree()
         #worker.parseBed()
         sys.stderr.write("[execute]\tCreating the nodes\n")#, flush=True)
         #worker.createNodes()
