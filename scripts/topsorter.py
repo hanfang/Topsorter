@@ -77,7 +77,7 @@ class topSorter:
         if not self.vcfReader.contigs:
             thisDir, thisFn = os.path.split(__file__)
             thisDir = "/seq/schatz/hfang/Develop/Topsorter"
-            fn = os.path.join(thisDir, "data", "hg19.chrom.sizes.txt")
+            fn = os.path.join(thisDir, "data", "grch38.chrom.sizes.txt")
             with open(fn, 'r') as f:
                 lines = f.readlines()
                 for line in lines:
@@ -102,10 +102,10 @@ class topSorter:
         for var in self.largeVariants:
             chr = var.CHROM
             chrEnd = self.chrSizes[chr]
-            if var.POS-self.windowSize-1 >=0 and var.INFO['END']+self.windowSize-1 <= chrEnd:
+            if var.POS - self.windowSize - 1 >= 0 and var.INFO['END'] + self.windowSize - 1 <= chrEnd:
                 windowSize = self.windowSize
             else:
-                windowSize = min(var.POS, chrEnd-var.INFO['END'])
+                windowSize = min(var.POS, chrEnd - var.INFO['END'])
                 print("[warning]\t" + str(var.ID) + " - distance to chromosome end smaller than specified: " + str(windowSize) +"\n")
             if windowSize <= 500:
                 print("[warning]\t" + str(var.ID) + " - distance to chromosome end is less than 500bp\n")
