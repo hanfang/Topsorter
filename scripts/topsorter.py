@@ -55,22 +55,37 @@ class topSorter:
         self.prefix = os.path.splitext(os.path.basename(self.inVcf))[0]
         # remove alt contigs
         contigsToExclude = "^((?!random|Un|EBV|MT|M).)*$"
-        self.chrs = [i for i in self.vcfReader.contigs.keys() if re.match(contigsToExclude, i)]
+        if self.vcfReader.contigs.keys():
+            self.chrs = [i for i in self.vcfReader.contigs.keys() if re.match(contigsToExclude, i)]
+        else:
+            self.chrs = sorted(list(set([var.CHROM for var in self.vcfReader])))
+            self.chrs = [i for i in self.chrs if re.match(contigsToExclude, i)]
+        chrsHash = set(self.chrs)
         #samples = self.vcfReader.samples
         # [temp] filter out variants without END
         hashset = set()
+        self.vcfReader = vcf.Reader(open(self.inVcf, 'r'))
         for var in self.vcfReader:
             #call = variant.genotype(samples[0])
-            if 'END' in var.INFO and 'PAIR_COUNT' in var.INFO and var.INFO['SVTYPE'] in ("DEL", "DUP", "INV"):
+            if 'END' in var.INFO and var.INFO['SVTYPE'] in {"DEL", "DUP", "INV", "BND"}: # and 'PAIR_COUNT' in var.INFO
                 if abs(var.INFO['END'] - var.POS) > 10000:
-                    # if var.INFO['PAIR_COUNT'] >= 10: #  or var.samples['1']['SU'] >= 10:
                     id = (var.CHROM, var.POS, var.INFO['END'])
-                    if id not in hashset and var.CHROM in self.chrs:
+                    if id not in hashset and var.CHROM in chrsHash:
                         self.largeVariants.append(var)
                         hashset.add(id)
         # create a dict of chromosome: size
-        for k, v in self.vcfReader.contigs.items():
-            self.chrSizes[k] = v[1]
+        if not self.vcfReader.contigs:
+            thisDir, thisFn = os.path.split(__file__)
+            thisDir = "/seq/schatz/hfang/Develop/Topsorter"
+            fn = os.path.join(thisDir, "data", "hg19.chrom.sizes.txt")
+            with open(fn, 'r') as f:
+                lines = f.readlines()
+                for line in lines:
+                    k, v = line.split("\t")
+                    self.chrSizes[k] = int(v)
+        else:
+            for k, v in self.vcfReader.contigs.items():
+                self.chrSizes[k] = v[1]
 
     def createFolder(self):
         cmd = 'mkdir -p ' + self.prefix + ';' + 'mkdir -p ' + self.prefix + '/DAGs'
@@ -174,12 +189,9 @@ class topSorter:
         lastVar = treeLst[-1]
         if lastVar not in existedNodes:
             DAG, leftNode, rightNode = self.nonOverlapGraph(DAG, rightNode, None, lastVar)
-        #for i in list(DAG.edges()):
-        #    print(i)
         # plotting
-        plt.figure()# figsize=(12, 12))
+        plt.figure()
         labels = {}
-        #print(DAG.nodes())
         for node in DAG.nodes():
             labels[node] = (node.data[0].split(":")[0], node.data[1])
         nx.draw_networkx(DAG, labels=labels)
@@ -243,7 +255,6 @@ class topSorter:
         dag = self.DAGs[chr]
         # sys.stderr.write("[execute]\tPerforming topological sorting for " + str(chr) + "\n")
         order = nx.topological_sort(dag)
-        # print("[results]\t Topologically sorted order of nodes in ", chr, "\n", order, flush=True)
         # find the longest path
         sys.stderr.write("[execute]\tFinding longest paths in " + str(chr) + "\n")
         longest_weighted_path = self.longestWeightedPath(dag)
@@ -347,11 +358,11 @@ class topSorter:
                 allDelBnds = set([i.data[0] for i in order if i.data[1] == "DEL" or i.data[1] == "BND"])
                 falseDelBnds = set([i.data[0] for i in longest_weighted_path if i.data[1] == "DEL" or i.data[1] == "BND"])
                 trueDelBnds = allDelBnds.difference(falseDelBnds)
-                dups = set([i.data[0] for i in longest_weighted_path if i.data[1] == "DUP_COPY"])
-                invs = set([i.data[0] for i in longest_weighted_path if i.data[1] == "INV_FLIP"])
+                dups = set([i.data[0] for i in longest_weighted_path if i.data[1] == "DupCopy"])
+                invs = set([i.data[0] for i in longest_weighted_path if i.data[1] == "InvFlip"])
                 self.passedVars[chr] = trueDelBnds | dups | invs
         # draw dags
-        sys.stderr.write("[execute]\tDrew graphs for each chromosome\n")  # , flush=True)
+        sys.stderr.write("[execute]\tDrew graphs for each chromosome\n")
         for chr in chroms:
             if chr in self.DAGs:
                 self.drawDAG(chr)
@@ -376,7 +387,7 @@ class topSorter:
                 vcf_writer.write_record(var)
         good, bad = np.array(good), np.array(bad)
         data_to_plot = [good, bad]
-        print(np.mean(good), np.mean(bad))
+        #print(np.mean(good), np.mean(bad))
         fig = plt.figure(1, figsize=(9, 6))
         ax = fig.add_subplot(111)
         bp = ax.boxplot(data_to_plot)
@@ -411,13 +422,12 @@ if __name__ == '__main__':
         worker.exportVcfBed()
         sys.stderr.write("[execute]\tBuilding interval trees for the variants\n")#, flush=True)
         worker.buildIntervalTree()
-        worker.parseBed()
-        #worker.createNodes()
+        #worker.parseBed()
         sys.stderr.write("[execute]\tConstructing the graph and finding the longest paths\n")#, flush=True)
-        worker.allDAGs()
+        #worker.allDAGs()
         time = str(datetime.now())
         sys.stderr.write("[execute]\tExporting the vcf file\n")#, flush=True)
-        worker.exportVcf()
+        #worker.exportVcf()
         sys.stderr.write("[status]\tTopsorter finished " + str(time) + "\n")#, flush=True)
     # print usage message if any argument is missing
     else:
