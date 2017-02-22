@@ -56,7 +56,6 @@ class topSorter:
         # remove alt contigs
         contigsToExclude = "^((?!random|Un|EBV|MT|M).)*$"
         self.chrs = [i for i in self.vcfReader.contigs.keys() if re.match(contigsToExclude, i)]
-        # self.chrs = ["chr20"]
         #samples = self.vcfReader.samples
         # [temp] filter out variants without END
         hashset = set()
@@ -239,64 +238,6 @@ class topSorter:
         DAG, tmp1, tmp2 = self.nonOverlapGraph(DAG, nodeLL, nodeLR, nextVar, weights)
         return DAG, leftNode, rightNode
 
-    ## TODO: Change me
-    def createNodes(self):
-        # scan the chromosomes and split by variants
-        lastPos = collections.defaultdict(int)
-        for chr in self.chrs:
-            i = 0
-            variants = [var for var in self.largeVariants if var.CHROM == chr]
-            for var in variants:
-                # add ref node
-                refNode = (var.CHROM, i, var.POS - 1, "REF", var.ID)
-                self.graph[chr].append(refNode)
-                # add variant node
-                varNode = (var.CHROM, var.POS - 1, var.INFO['END'] - 1, var.INFO['SVTYPE'], var.ID)
-                self.graph[chr].append(varNode)
-                i = var.INFO['END'] - 1
-                lastPos[chr] = i  # keep track of the last pos
-        # add the last node
-        for chr in self.chrs:
-            lastNode = (chr, lastPos[chr], self.chrSizes[chr]-1, "REF")
-            self.graph[chr].append(lastNode)
-
-    def createWeightedDAG(self, chr):
-        DAG = nx.DiGraph()
-        # add nodes
-        currChr = self.graph[chr]
-        weights = self.barcodes[chr]
-        # initialize the graph with equal weight
-        for i in range(1, len(currChr)-1):
-            varId = currChr[i][4]
-            [b2l, b2r, b2a, l2r, l2a, r2a] = weights[varId]
-            DAG.add_node(curr[i-1])
-            DAG.add_node(curr[i])
-            DAG.add_node(curr[i+1])
-            if curr[i][3] == "DEL":
-                DAG.add_edge(curr[i-1], curr[i], weight=b2l)
-                DAG.add_edge(curr[i-1], curr[i+1], weight=b2a)
-                DAG.add_edge(curr[i], curr[i+1], weight=r2a)
-            elif curr[i][3] == "DUP":
-                nodeCopy = (curr[i][0], curr[i][1], curr[i][2], "DUP_COPY", varId)
-                DAG.add_node(nodeCopy)
-                DAG.add_edge(curr[i-1], curr[i], weight=b2l)
-                DAG.add_edge(curr[i], nodeCopy, weight=l2r)
-                DAG.add_edge(curr[i], curr[i+1], weight=l2a)
-                DAG.add_edge(nodeCopy, curr[i+1], weight=r2a)
-            elif curr[i][3] == "INV":
-                nodeInv = (curr[i][0], curr[i][2], curr[i][1], "INV_FLIP", varId)
-                DAG.add_edge(curr[i-1], curr[i], weight=b2l)
-                DAG.add_edge(curr[i], curr[i+1], weight=r2a)
-                DAG.add_edge(curr[i-1], nodeInv, weight=b2r)
-                DAG.add_edge(nodeInv, curr[i+1], weight=l2a)
-            elif curr[i][3] == "BND": # currently as DELs, TBD B2A, unique
-                DAG.add_edge(curr[i-1], curr[i], weight=b2l)
-                DAG.add_edge(curr[i], curr[i+1], weight=r2a)
-                DAG.add_edge(curr[i-1], curr[i+1], weight=b2a) #
-            else:
-                pass
-        return DAG
-
     def findLongestPath(self, chr):
         # topological sorting
         dag = self.DAGs[chr]
@@ -328,7 +269,6 @@ class topSorter:
 
     def hierarchy_pos(self, G, root, width=1., vert_gap=0.2, vert_loc=0, xcenter=0.5):
         '''If there is a cycle that is reachable from root, then result will not be a hierarchy.
-
            G: the graph
            root: the root node of current branch
            width: horizontal space allocated for this branch - avoids overlap with other branches
@@ -336,7 +276,6 @@ class topSorter:
            vert_loc: vertical location of root
            xcenter: horizontal location of root
         '''
-
         def h_recur(G, root, width=4., vert_gap=8, vert_loc=2, xcenter=0.5, pos=None, parent=None, parsed=[]):
             if (root not in parsed):
                 parsed.append(root)
@@ -353,7 +292,6 @@ class topSorter:
                         pos = h_recur(G, neighbor, width=dx, vert_gap=vert_gap, vert_loc=vert_loc - vert_gap,
                                       xcenter=nextx, pos=pos, parent=root, parsed=parsed)
             return pos
-
         return h_recur(G, root, width=4., vert_gap=8, vert_loc=2, xcenter=0.5)
 
     def drawDAG(self, chr):
@@ -378,14 +316,7 @@ class topSorter:
         # extract dag for each chr
         dag = self.DAGs[chr]
         pos = self.hierarchy_pos(dag, sourceNode)
-        #edge_labels = {(n1,n2): dag[n1][n2]['weight'] for (n1,n2) in dag.edges()}
-        #pos_higher = {}
-        #y_off = 1  # offset on the y axis
-        # change label positions
-        #for k, v in pos.items():
-        #    pos_higher[k] = (v[0], v[1]+y_off)
-        # start plotting
-        plt.figure()#figsize=(12, 10))
+        plt.figure()
         nx.draw_networkx(dag, pos=pos, node_size=30, labels=labels, font_size = 4)#, with_labels=False, arrows=False)
         plt.title(chr)
         plt.axis('off')
@@ -397,13 +328,12 @@ class topSorter:
     def allDAGs(self):
         # create a list of chromosome to analyze
         #chroms = list(set(self.chrs).intersection(list(self.graph.keys())))
-        chroms = list(set(self.chrs)) #.intersection(list(self.graph.keys())))
+        chroms = sorted(list(set(self.chrs))) #.intersection(list(self.graph.keys())))
         if "chrM" in chroms:
             chroms.remove("chrM")
         # create dag
         for chr in chroms:
-            sys.stderr.write("[execute]\tAnalyzing "+ str(chr) + "\n")
-            #dag = self.createWeightedDAG(chr)
+            # sys.stderr.write("[execute]\tAnalyzing "+ str(chr) + "\n")
             dag = self.splitNodes(chr)
             if dag:
                 self.DAGs[chr] = dag
@@ -414,15 +344,12 @@ class topSorter:
                 self.orders[chr] = order
                 self.paths[chr] = longest_weighted_path
                 self.passedVars[chr] = set([])
-                longestVars = set([i.data[0] for i in longest_weighted_path])
                 allDelBnds = set([i.data[0] for i in order if i.data[1] == "DEL" or i.data[1] == "BND"])
                 falseDelBnds = set([i.data[0] for i in longest_weighted_path if i.data[1] == "DEL" or i.data[1] == "BND"])
                 trueDelBnds = allDelBnds.difference(falseDelBnds)
                 dups = set([i.data[0] for i in longest_weighted_path if i.data[1] == "DUP_COPY"])
                 invs = set([i.data[0] for i in longest_weighted_path if i.data[1] == "INV_FLIP"])
                 self.passedVars[chr] = trueDelBnds | dups | invs
-                #self.passedVars[chr] = set(
-                #    [i[4] for i in longest_weighted_path[:-1] if i.data[1] in ('DEL', "DUP_COPY", "INV_FLIP", "BND")])
         # draw dags
         sys.stderr.write("[execute]\tDrew graphs for each chromosome\n")  # , flush=True)
         for chr in chroms:
