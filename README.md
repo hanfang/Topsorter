@@ -2,7 +2,7 @@
 ### - Graphical assessment of structrial variants using 10x genomics data Edit
 ####  
 
-![alt text](https://github.com/hanfang/Topsorter/blob/master/image/topsorter.png =100x100)
+![alt text](https://github.com/hanfang/Topsorter/blob/master/image/topsorter.png )
 
 ### Contact
 - Han Fang (hanfang.cshl@gmail.com)
