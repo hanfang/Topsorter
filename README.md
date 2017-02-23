@@ -1,7 +1,8 @@
-## README
+## Topsorter
+### - Graphical assessment of structrial variants using 10x genomics data Edit
 ####  
 
-![alt text](https://github.com/hanfang/Topsorter/blob/master/image/topsorter.png "Logo")
+![alt text](https://github.com/hanfang/Topsorter/blob/master/image/topsorter.png | width=100)
 
 ### Contact
 - Han Fang (hanfang.cshl@gmail.com)
