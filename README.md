@@ -1,6 +1,8 @@
 ## README
 ####  
 
+![alt text](https://github.com/hanfang/topsorter/raw/master/iamges/common/images/topsorter.png "Logo")
+
 ### Contact
 - Han Fang (hanfang.cshl@gmail.com)
 - Srividya Ramakrishnan (srividya.ramki@gmail.com)
