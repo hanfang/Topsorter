@@ -121,7 +121,7 @@ class topSorter:
         bedOut.write(bedStr)
 
     def parseBed(self):
-        with open(self.prefix + "/" + self.prefix + ".barcodes.bed", 'r') as fl:
+        with open(self.prefix + "/" + self.prefix + "." + str(self.windowSize) + ".barcodes.bed", 'r') as fl:
             next(fl)
             for line in fl:
                 row = line.split("\t")
@@ -216,19 +216,22 @@ class topSorter:
         DAG.add_node(node2)
         DAG.add_node(node3)
         DAG.add_edge(node1, node2, weight=b2l)
-        DAG.add_edge(node2, node3, weight=r2a)
         if svType == "DEL":
             DAG.add_edge(node1, node3, weight=b2a)
+            DAG.add_edge(node2, node3, weight=r2a)
         elif svType == "DUP":
             nodeCopy = Interval(currVar.begin, currVar.end, (svId, "DupCopy"))
-            DAG.add_edge(node2, nodeCopy, weight=uniqLR)
-            DAG.add_edge(nodeCopy, node3, weight=uniqBA)
+            DAG.add_edge(node2, node3, weight=uniqLR)
+            DAG.add_edge(node2, nodeCopy, weight=l2r)
+            DAG.add_edge(nodeCopy, node3, weight=r2a) # undecided
         elif svType == "INV":
             nodeInv = Interval(currVar.end, currVar.begin, (svId, "InvFlip"))
+            DAG.add_edge(node2, node3, weight=r2a)
             DAG.add_edge(node1, nodeInv, weight=b2r)
             DAG.add_edge(nodeInv, node3, weight=l2a)
         elif svType == "BND":
-            DAG.add_edge(node1, node3, weight=b2a)
+            DAG.add_edge(node2, node3, weight=r2a)
+            DAG.add_edge(node1, node3, weight=uniqBA)
         return DAG, node1, node3
 
     def overlapGraph(self, DAG=None, leftNode=None, rightNode=None, currVar=None, nextVar=None, weights=None):
@@ -251,13 +254,12 @@ class topSorter:
         return DAG, leftNode, rightNode
 
     def findLongestPath(self, chr):
-        # topological sorting
+        # topological sorting and find the longest path
         dag = self.DAGs[chr]
-        # sys.stderr.write("[execute]\tPerforming topological sorting for " + str(chr) + "\n")
         order = nx.topological_sort(dag)
-        # find the longest path
-        sys.stderr.write("[execute]\tFinding longest paths in " + str(chr) + "\n")
         longest_weighted_path = self.longestWeightedPath(dag)
+        # sys.stderr.write("[execute]\tPerforming topological sorting for " + str(chr) + "\n")
+        # sys.stderr.write("[execute]\tFinding longest paths in " + str(chr) + "\n")
         print("[results]\tLongest weighted path in", chr, "\n", longest_weighted_path)
         return order, longest_weighted_path
 
@@ -380,18 +382,22 @@ class topSorter:
             if var.CHROM in self.chrs:
                 if self.passedVars[var.CHROM] and var.ID in self.passedVars[var.CHROM]:
                     var.INFO["Topsorter"] = "T"  # placeholder
-                    good.append(int(var.INFO["PAIR_COUNT"]))
+                    #print(var.INFO["SU"])
+                    # good.append(int(var.INFO["SU"][0]))
                 else:
                     var.INFO["Topsorter"] = "F"
-                    bad.append(int(var.INFO["PAIR_COUNT"]))
+                    # bad.append(int(var.INFO["SU"][0]))
                 vcf_writer.write_record(var)
-        good, bad = np.array(good), np.array(bad)
-        data_to_plot = [good, bad]
+        #print(np.mean(np.array(good)), np.mean(np.array(bad)))
+        #good = [i for i in good if i < 200]
+        #bad = [i for i in bad if i < 200]
+        #good, bad = np.array(good), np.array(bad)
+        #data_to_plot = [good, bad]
         #print(np.mean(good), np.mean(bad))
-        fig = plt.figure(1, figsize=(9, 6))
-        ax = fig.add_subplot(111)
-        bp = ax.boxplot(data_to_plot)
-        fig.savefig('boxplot.png', bbox_inches='tight')
+        #fig = plt.figure(1, figsize=(9, 6))
+        #ax = fig.add_subplot(111)
+        #bp = ax.boxplot(data_to_plot)
+        #fig.savefig('boxplot.png', bbox_inches='tight')
 
 # the main process
 if __name__ == '__main__':
@@ -422,12 +428,12 @@ if __name__ == '__main__':
         worker.exportVcfBed()
         sys.stderr.write("[execute]\tBuilding interval trees for the variants\n")#, flush=True)
         worker.buildIntervalTree()
-        #worker.parseBed()
+        worker.parseBed()
         sys.stderr.write("[execute]\tConstructing the graph and finding the longest paths\n")#, flush=True)
-        #worker.allDAGs()
+        worker.allDAGs()
         time = str(datetime.now())
         sys.stderr.write("[execute]\tExporting the vcf file\n")#, flush=True)
-        #worker.exportVcf()
+        worker.exportVcf()
         sys.stderr.write("[status]\tTopsorter finished " + str(time) + "\n")#, flush=True)
     # print usage message if any argument is missing
     else:
