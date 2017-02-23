@@ -1,5 +1,5 @@
 # Topsorter
-### - Graphical assessment of structrial variants using 10x genomics data Edit
+### - Graphical assessment of structrial variants using 10x genomics data
 ####  
 
 ![alt text](https://github.com/hanfang/Topsorter/blob/master/image/topsorter.png)
