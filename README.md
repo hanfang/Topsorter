@@ -1,7 +1,7 @@
 ## README
 ####  
 
-![alt text](https://github.com/hanfang/topsorter/raw/master/iamges/common/images/topsorter.png "Logo")
+![alt text](https://github.com/hanfang/Topsorter/blob/master/image/topsorter.png "Logo")
 
 ### Contact
 - Han Fang (hanfang.cshl@gmail.com)
