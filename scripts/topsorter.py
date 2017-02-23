@@ -25,18 +25,15 @@ from networkx.drawing.nx_agraph import graphviz_layout
 from datetime import datetime
 from intervaltree import Interval, IntervalTree
 
-# the class for the data structure
-class TreeNode(object):
-    def __init__(self, chr):
-        self.chr = chr
-        self.start = None
-        self.end = None
-        self.next = []
-
 
 class topSorter:
-    'parse & filter vcf files, construct & traverse DAGs'
+    """ add me
+    """
     def __init__(self, inVcf, windowSize):
+        """
+        :param inVcf: input vcf file
+        :param windowSize: window size for barcode counting
+        """
         self.inVcf  = inVcf
         self.windowSize = windowSize
         # self.sub_vcf = []
@@ -48,8 +45,11 @@ class topSorter:
         self.barcodes = collections.defaultdict(dict)
         self.treeDic = {}
 
-    # function for reading and filtering vcf files
     def readVcf(self):
+        """
+        reading and filtering vcf files
+        :return: None
+        """
         # import vcf
         self.vcfReader = vcf.Reader(open(self.inVcf, 'r'))
         self.prefix = os.path.splitext(os.path.basename(self.inVcf))[0]
@@ -88,10 +88,18 @@ class topSorter:
                 self.chrSizes[k] = v[1]
 
     def createFolder(self):
+        """
+        create folders
+        :return: on disk
+        """
         cmd = 'mkdir -p ' + self.prefix + ';' + 'mkdir -p ' + self.prefix + '/DAGs'
         os.system(cmd)
 
     def exportVcfBed(self):
+        """
+        export bed file to disk
+        :return: on disk
+        """
         # export the subset of large SVs to a vcf
         if int(sys.version_info.major) >= 3:
             vcf_writer = vcf.Writer(open(self.prefix + "/" + self.prefix + ".large_sv.vcf", 'w'), self.vcfReader)
@@ -121,6 +129,10 @@ class topSorter:
         bedOut.write(bedStr)
 
     def parseBed(self):
+        """
+        parse the input barcode bed file
+        :return: None
+        """
         with open(self.prefix + "/" + self.prefix + "." + str(self.windowSize) + ".barcodes.bed", 'r') as fl:
             next(fl)
             for line in fl:
@@ -130,6 +142,10 @@ class topSorter:
         fl.close()
 
     def buildIntervalTree(self):
+        """
+        build interval tree for variants
+        :return: None
+        """
         # sort the variants by start coordinates
         self.largeVariants = sorted(self.largeVariants, key=lambda x: (x.CHROM, x.POS))
         # build interval tree for each chr
@@ -140,12 +156,27 @@ class topSorter:
             self.treeDic[chr] = tree
 
     def overlapFraction(self, varA, varB):
+        """
+        calculate reciprocal overlapping fraction of two variants
+        :param varA: variant A as Interval object
+        :param varB: variant B as Interval object
+        :return: fraction (float)
+        """
         Asize, Bsize = varA.end - varA.begin, varB.end - varB.begin
         overlap = min(varA.end, varB.end) - max(varA.begin, varB.begin)
         fraction = float(overlap) / float(min(Asize, Bsize))
         return fraction
 
-    def splitNodes(self, chr):
+    def buildGraph(self, chr):
+        """
+        build a graph for a chromosome
+        :param chr: chromosome name (str)
+        :return: dag (networkx graph object)
+        """
+        """
+        :param chr:
+        :return:
+        """
         tree = self.treeDic[chr]
         if not tree:
             return
@@ -185,10 +216,6 @@ class topSorter:
                             DAG, leftNode, rightNode = self.overlapGraph(DAG, leftSuperNode, rightSuperNode, currVar, childVar, weights)
                             existedNodes.add(childVar)
                     existedNodes.add(currVar)
-        # last variant
-        lastVar = treeLst[-1]
-        if lastVar not in existedNodes:
-            DAG, leftNode, rightNode = self.nonOverlapGraph(DAG, rightNode, None, lastVar)
         # plotting
         plt.figure()
         labels = {}
@@ -207,6 +234,15 @@ class topSorter:
         #print(sorted(lst))
 
     def nonOverlapGraph(self, DAG=None, leftNode=None, rightNode=None, currVar=None, weights=None):
+        """
+        build non overlapping graph locally
+        :param DAG: directed acyclic graph (networkx graph object)
+        :param leftNode: node on the left, Interval object
+        :param rightNode: node on the right, Interval object
+        :param currVar: current variant, Interval object
+        :param weights: dictionary of weights for each variant, dict
+        :return: DAG, node1, node3
+        """
         svId, svType = currVar.data
         [b2l, b2r, b2a, l2r, l2a, r2a, uniqBA, uniqLR] = weights[svId]
         node1 = leftNode if leftNode else Interval(0, currVar.begin - 1, (svId, "REF"))
@@ -235,6 +271,16 @@ class topSorter:
         return DAG, node1, node3
 
     def overlapGraph(self, DAG=None, leftNode=None, rightNode=None, currVar=None, nextVar=None, weights=None):
+        """
+        build overlapping graph locally when two or more variants are overlapping
+        :param DAG: directed acyclic graph (networkx graph object)
+        :param leftNode: node on the left (Interval object)
+        :param rightNode: node on the right (Interval object)
+        :param currVar: current variant (Interval object)
+        :param nextVar: next variant (Interval object)
+        :param weights: dictionary of weights for each variant (dict)
+        :return: DAG, leftNode, rightNode
+        """
         # curr var
         nodeUL = Interval(currVar.begin - 1, currVar.begin, (currVar.data[0], "REF"))
         nodeUR = Interval(currVar.end, currVar.end + 1, (currVar.data[0], "REF"))
@@ -254,6 +300,11 @@ class topSorter:
         return DAG, leftNode, rightNode
 
     def findLongestPath(self, chr):
+        """
+        find the longest path for a chr
+        :param chr: chromosome name (str)
+        :return: order (list), longest_weighted_path (list)
+        """
         # topological sorting and find the longest path
         dag = self.DAGs[chr]
         order = nx.topological_sort(dag)
@@ -264,6 +315,11 @@ class topSorter:
         return order, longest_weighted_path
 
     def longestWeightedPath(self, G):
+        """
+        find longest path in a weighted DAG
+        :param G: dag (networkx graph object)
+        :return: longest_weighted_path (list)
+        """
         dist = {} # stores [node, distance] pair
         # start with topological sorted order
         for node in nx.topological_sort(G):
@@ -281,14 +337,15 @@ class topSorter:
         return list(reversed(path))
 
     def hierarchy_pos(self, G, root, width=1., vert_gap=0.2, vert_loc=0, xcenter=0.5):
-        '''If there is a cycle that is reachable from root, then result will not be a hierarchy.
-           G: the graph
-           root: the root node of current branch
-           width: horizontal space allocated for this branch - avoids overlap with other branches
-           vert_gap: gap between levels of hierarchy
-           vert_loc: vertical location of root
-           xcenter: horizontal location of root
-        '''
+        """
+        calculate hierarchy positions for nodes in a dag
+        :param G: the graph
+        :param root: the root node of current branch
+        :param width: horizontal space allocated for this branch - avoids overlap with other branches
+        :param vert_gap: gap between levels of hierarchy
+        :param vert_loc: vertical location of root
+        :param xcenter: horizontal location of root
+        """
         def h_recur(G, root, width=4., vert_gap=8, vert_loc=2, xcenter=0.5, pos=None, parent=None, parsed=[]):
             if (root not in parsed):
                 parsed.append(root)
@@ -308,6 +365,11 @@ class topSorter:
         return h_recur(G, root, width=4., vert_gap=8, vert_loc=2, xcenter=0.5)
 
     def drawDAG(self, chr):
+        """
+        draw a dag
+        :param chr: chromosome name (str)
+        :return: on disk
+        """
         labels = {}
         for node in self.orders[chr]:
             #labels[node] = node[3]
@@ -339,6 +401,10 @@ class topSorter:
         plt.close()
 
     def allDAGs(self):
+        """
+        execute the graphical analysis for all the chromosomes
+        :return: None
+        """
         # create a list of chromosome to analyze
         #chroms = list(set(self.chrs).intersection(list(self.graph.keys())))
         chroms = sorted(list(set(self.chrs))) #.intersection(list(self.graph.keys())))
@@ -347,7 +413,7 @@ class topSorter:
         # create dag
         for chr in chroms:
             # sys.stderr.write("[execute]\tAnalyzing "+ str(chr) + "\n")
-            dag = self.splitNodes(chr)
+            dag = self.buildGraph(chr)
             if dag:
                 self.DAGs[chr] = dag
         # find longest path
@@ -369,8 +435,11 @@ class topSorter:
             if chr in self.DAGs:
                 self.drawDAG(chr)
 
-    # exporting vcf files
     def exportVcf(self):
+        """
+        export vcf file with topsorter tags
+        :return: on disk
+        """
         ## TODO: output in sorted order
         if int(sys.version_info.major) >= 3:
             vcf_writer = vcf.Writer(open(self.prefix + "/" + self.prefix + ".topsorter.vcf", 'w'), self.vcfReader)
@@ -382,7 +451,6 @@ class topSorter:
             if var.CHROM in self.chrs:
                 if self.passedVars[var.CHROM] and var.ID in self.passedVars[var.CHROM]:
                     var.INFO["Topsorter"] = "T"  # placeholder
-                    #print(var.INFO["SU"])
                     # good.append(int(var.INFO["SU"][0]))
                 else:
                     var.INFO["Topsorter"] = "F"
@@ -404,7 +472,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='createGraph.py - a script for constructing a graph from a vcf file')
     parser.add_argument("-i", help="input vcf file [REQUIRED]",required=True)
     parser.add_argument("-w", help="window size of counting barcodes, default: 1000 [OPTIONAL]", default=1000, required=False, type=int)
-
     # check if there is any argument
     if len(sys.argv) <= 1:
         parser.print_usage()
@@ -412,7 +479,6 @@ if __name__ == '__main__':
         sys.exit(1)
     else:
         args = parser.parse_args()
-
     # process the file if the input files exist
     if (args.i!=None):
         vcfFn = args.i
@@ -420,21 +486,22 @@ if __name__ == '__main__':
         # main
         worker = topSorter(vcfFn, windowSize)
         time = str(datetime.now())
-        sys.stderr.write("[status]\tTopsorter started at " + str(time) + "\n")#, flush=True)
-        sys.stderr.write("[status]\tReading the vcf file: " + str(args.i) + "\n")#, flush=True)
+        sys.stderr.write("[status]\tTopsorter started at " + str(time) + "\n")
+        sys.stderr.write("[status]\tReading the vcf file: " + str(args.i) + "\n")
         worker.readVcf()
         worker.createFolder()
-        sys.stderr.write("[execute]\tExporting the large SVs to vcf and flanking regions to a bed file\n")#, flush=True)
+        sys.stderr.write("[execute]\tExporting the large SVs to vcf and flanking regions to a bed file\n")
         worker.exportVcfBed()
-        sys.stderr.write("[execute]\tBuilding interval trees for the variants\n")#, flush=True)
+        sys.stderr.write("[execute]\tBuilding interval trees for the variants\n")
         worker.buildIntervalTree()
+        sys.stderr.write("[execute]\tParsing the barcode bed file\n")
         worker.parseBed()
-        sys.stderr.write("[execute]\tConstructing the graph and finding the longest paths\n")#, flush=True)
+        sys.stderr.write("[execute]\tConstructing the graph and finding the longest paths\n")
         worker.allDAGs()
         time = str(datetime.now())
-        sys.stderr.write("[execute]\tExporting the vcf file\n")#, flush=True)
+        sys.stderr.write("[execute]\tExporting the vcf file\n")
         worker.exportVcf()
-        sys.stderr.write("[status]\tTopsorter finished " + str(time) + "\n")#, flush=True)
+        sys.stderr.write("[status]\tTopsorter finished " + str(time) + "\n")
     # print usage message if any argument is missing
     else:
         sys.stderr.write("[error]\tmissing argument")
